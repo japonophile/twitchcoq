@@ -1,0 +1,6 @@
+.python-version
+*.swp
+
+*.vo
+*.glob
+*.aux
