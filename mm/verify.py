@@ -1,10 +1,12 @@
+import sys
 from lark import Lark
 
 l = Lark(open("mm.g").read())
-p = l.parse(open("miu2.mm").read())
+p = l.parse(open("miu2.mm" if len(sys.argv) == 1 else sys.argv[1]).read())
 
 constants = set()
 asserts = dict()
+hypos = dict()
 variables = dict()
 essen = dict()
 
@@ -34,11 +36,7 @@ def verify_proof(intyc, inms, xx):
     xx = xx.children[0]
     stack = Stack()
     for s in xx.children:
-        assert s in asserts
-        a = asserts[s]
-        ms = a['ms']
         bindings = {}
-
         def bind(ms):
             # the bind in normal scope
             nms = []
@@ -57,15 +55,22 @@ def verify_proof(intyc, inms, xx):
                 ret += x
             return ret
 
-        # first bind in essential scope
-        for e in a['essen'].values():
-            et, enms = stack.pop()
-            print('Must verify %s %s is %s %s' % (e['type'], lp(e['ms']), et, lp(enms)))
-            nms = bind(e['ms'])
-            assert nms == enms
+        if s in asserts:
+            a = asserts[s]
+            ms = a['ms']
+            # first bind in essential scope
+            for e in a['essen'].values():
+                et, enms = stack.pop()
+                print('Must verify %s %s is %s %s' % (e['type'], lp(e['ms']), et, lp(enms)))
+                nms = bind(e['ms'])
+                assert nms == enms
 
-        nms = bind(ms)
-        stack.push(a['type'], nms)
+            nms = bind(ms)
+            stack.push(a['type'], nms)
+        elif s in hypos:
+            a = hypos[s]
+            # don't bind variables
+            stack.push(a['type'], a['ms'])
 
     # confirm stack is this
     o = stack.pop()
@@ -89,6 +94,7 @@ def parse_stmt(xx):
             var = xx.children[2].children[0]
             assert var in variables
             variables[var]['type'] = tyc
+            hypos[lbl] = {'type': tyc, 'ms': [var]}
         elif xx.data == 'essential_stmt':
             ms = xx.children[2:]
             essen[lbl] = {'type': tyc, 'ms': ms}
