@@ -11,7 +11,7 @@ stupid : "Declare" /(.)+/
        | "Notation" /(.)+/
        | "Print" /(.)+/
 
-// IDENT
+// ident
 FIRST_LETTER : ("a".."z") | ("A".."Z") | "_"
 SUBSEQUENT_LETTER : ("a".."z") | ("A".."Z") | ("0".."9") | "'" | "_"
 IDENT : FIRST_LETTER SUBSEQUENT_LETTER*
@@ -28,26 +28,21 @@ match_item : term ["as" name] ["in" qualid [pattern]*]
 return_type : "return" term
 
 pattern : qualid
-mult_pattern : pattern // broken
+mult_pattern : pattern  // broken
 equation : mult_pattern "=>" term
 
-// "exists" and "=" are not part of the language
+// "exists" and "=" are not a part of the language
 term : "forall" binders "," term
      | "match" match_item [return_type] "with" ["|" equation ["|" equation]* ] "end"
      | "if" term "then" term "else" term
      | "(" term ")"
      | term "->" term  // fake, this notation is defined
-     | term arg+  // function call
+     | term arg+ // function call
      | sort
      | qualid
 
 // this is really wrong
 tactic : "exact" term "."
-       | "intros."
-       | "induction" qualid "."
-       | "unfold" qualid "."
-       | "assert" qualid "."
-       | "apply" [qualid "in"] qualid "."
 
 proof : "Proof." tactic* ("Qed." | "Abort.")
 
