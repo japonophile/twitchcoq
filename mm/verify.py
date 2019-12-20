@@ -4,6 +4,7 @@ from lark import Lark
 
 l = Lark(open("mm.g").read())
 p = l.parse(open("miu2.mm" if len(sys.argv) == 1 else sys.argv[1]).read())
+print("*********** LOADED ************")
 
 class Scope(object):
     def __init__(self):
@@ -11,7 +12,7 @@ class Scope(object):
         self.asserts = dict()
         self.hypos = dict()
         self.variables = dict()
-        self.essen = dict()
+        self.essen = list()
 
     def child(self):
         ret = Scope()
@@ -53,13 +54,18 @@ def verify_proof(scope, intyc, inms, xx):
     for s in xx.children:
         bindings = {}
         def bind(ms):
-            # the bind in normal scope
             nms = []
             for v in ms[::-1]:
                 if v in scope.variables:
                     if v not in bindings:
                         vt, vnms = stack.pop()
+                        assert 'type' in scope.variables[v]
                         assert scope.variables[v]['type'] == vt
+                        if 'disjoint' in scope.variables[v]:
+                            # TODO check for disjoint
+                            # is it here, am i understanding right?
+                            pass
+                        print("  binding %s to %s" % (v, lp(vnms)))
                         bindings[v] = vnms
                     nms.append(bindings[v])
                 else:
@@ -75,10 +81,11 @@ def verify_proof(scope, intyc, inms, xx):
             a = scope.asserts[s]
             ms = a['ms']
             # first bind in essential scope
-            for e in a['essen'].values():
+            for e in a['scope'].essen:
                 et, enms = stack.pop()
                 print('Must verify %s %s is %s %s' % (e['type'], lp(e['ms']), et, lp(enms)))
                 nms = bind(e['ms'])
+                print('compare %s to %s' % (lp(nms), lp(enms)))
                 assert nms == enms
 
             nms = bind(ms)
@@ -111,25 +118,40 @@ def parse_stmt(scope, xx):
         if xx.data == 'floating_stmt':
             var = xx.children[2].children[0]
             assert var in scope.variables
+            # TODO: we are throwing away this name, do we need it?
+            assert 'type' not in scope.variables[var]
             scope.variables[var]['type'] = tyc
             scope.hypos[lbl] = {'type': tyc, 'ms': [var]}
         elif xx.data == 'essential_stmt':
             ms = xx.children[2:]
-            scope.essen[lbl] = {'type': tyc, 'ms': ms}
+            scope.essen.append({'type': tyc, 'ms': ms})
             scope.hypos[lbl] = {'type': tyc, 'ms': ms}
     elif xx.data == 'assert_stmt':
         xx = xx.children[0]
         lbl = xx.children[0]
         tyc = xx.children[1].children[0].children[0]
+        assert tyc in scope.constants
         if xx.data == 'axiom_stmt':
             ms = xx.children[2:]
+            proof = None
         elif xx.data == 'provable_stmt':
             ms = xx.children[2:-1]
             proof = xx.children[-1]
+            """
             print("Verifying proof for %s" % lbl)
             verify_proof(scope, tyc, ms, proof)
             print("Verifyied proof for %s" % lbl)
-        scope.asserts[lbl] = {'type': tyc, 'ms': ms, 'essen': scope.essen.copy()}
+            """
+        scope.asserts[lbl] = {'type': tyc, 'ms': ms, 'scope': scope, 'proof': proof}
+    elif xx.data == 'disjoint_stmt':
+        av = [x.children[0] for x in xx.children]
+        for v in av:
+            assert v in scope.variables
+            scope.variables[v]['disjoint'] = [x for x in av if x != v]
+    elif xx.data == 'block':
+        tscope = scope.child()
+        for y in xx.children:
+            parse_stmt(tscope, y.children[0])
     else:
         print("IMPLEMENT", xx.data)
 
@@ -143,18 +165,13 @@ for x in p.children:
             scope.constants.add(cname)
     else:
         xx = xx.children[0]
-        if xx.data == 'block':
-            tscope = scope.child()
-            for y in xx.children:
-                parse_stmt(tscope, y.children[0])
-        else:
-            parse_stmt(scope, xx)
+        parse_stmt(scope, xx)
 
 print("*********** PARSED ************")
-"""
-print(constants)
-print(variables)
-for (k, v) in asserts.items():
-    print(k, v)
-"""
+
+for k, v in scope.asserts.items():
+    if v['proof'] is not None:
+        print("******** verify %s" % k)
+        verify_proof(v['scope'], v['type'], v['ms'], v['proof'])
+print("*********** VERIFIED ************")
 
