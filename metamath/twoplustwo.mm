@@ -4,6 +4,10 @@ wff_pa_ax1 $p wff not = 0 S x $=
   tzero varx tvar tsucc binpred_equals wff_atom wff_not
 $.
 
+wff_pa_ax1_term $p wff not = 0 S t $=
+  tzero tt tsucc binpred_equals wff_atom wff_not
+$.
+
 int1 $p |- implies chi not = 0 S x $=
   varx wff_pa_ax1 logbinopimplies varx wff_pa_ax1 wff-chi wff_logbinop varx pa_ax1 varx wff_pa_ax1 wff-chi ax-1 ax-mp
 $.
@@ -23,7 +27,7 @@ ${
        = wff forall x not = 0 S x
     min: vary pa_ax1
        = |- not = 0 S y
-    maj: vary wff_pa_ax1 varx int2
+    maj: varx vary wff_pa_ax1 int2
        = 
   $)
 
@@ -36,7 +40,7 @@ ${
   $.
 $}
 
-cheat2 $p |- forall x implies = x 0 not = 0 S x $=
+nocheat2 $p |- forall x implies = x 0 not = 0 S x $=
   varx quant_all varx wff_pa_ax1 wff_quant
   varx quant_all logbinopimplies varx wff_pa_ax1 varx tvar tzero binpred_equals wff_atom wff_logbinop wff_quant
   varx nocheat
@@ -44,15 +48,49 @@ cheat2 $p |- forall x implies = x 0 not = 0 S x $=
   ax-mp
 $.
 
+nocheat2_wff $p wff forall x implies = x 0 not = 0 S x $=
+  varx quant_all logbinopimplies varx tvar wff_pa_ax1_term varx tvar tzero binpred_equals wff_atom wff_logbinop wff_quant
+$.
+
+$( (forall x, forall y, x=y -> phi <-> psi) -> forall x, phi <-> forall y, psi $)
+
+tmp3 $a |- implies = x 0 iff = S x = S 0 $.
+
+$( x=0 -> (0 != S x <-> 0 != S 0) $)
+cheat3 $a |- implies = x 0 iff not = 0 S x not = 0 S 0 $.
+
+$( t,x,phi,chi,all_elim3_hyp1 $)
+nocheat4 $p |- implies forall x implies = x 0 not = 0 S x not = 0 S 0 $=
+  tzero
+  varx
+  varx tvar wff_pa_ax1_term
+  tzero wff_pa_ax1_term
+  varx cheat3
+  all_elim3
+$.
 
 $(
-onenotzero $p |- not = 0 S x $=
-?
-$.
+  x:   varx
+     = var x
+  t:   tzero
+     = term 0
+  phi: varx tvar wff_pa_ax1_term
+     = wff not = 0 S x
+  chi: tzero wff_pa_ax1_term
+     = wff not = 0 S 0
+
+  all_elim3
 $)
 
-$(
+one_ne_zero $p |- not = 0 S 0 $=
+  varx nocheat2_wff
+  tzero wff_pa_ax1_term
+  varx nocheat2
+  varx nocheat4
+  ax-mp
+$.
 
+$(
 
 chi:
    = not = 0 S x
@@ -99,7 +137,7 @@ varx wff_pa_ax1 wff_psi ax-1
 
 
 
-Prove cheat2
+Prove nocheat2
 
 phi: varx quant_all varx wff_pa_ax1 wff_quant
    = wff forall x not = 0 S x
