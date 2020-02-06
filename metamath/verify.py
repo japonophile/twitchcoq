@@ -7,6 +7,7 @@ import lark
 import logging
 import argparse
 import traceback
+import itertools
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Verify metamath')
@@ -19,14 +20,16 @@ args = parser.parse_args()
 logging.basicConfig(level=logging.WARNING, format='%(message)s')
 
 log = logging.getLogger(__name__)
+loglevel = logging.WARNING
 if args.debug:
-  log.setLevel(logging.DEBUG)
+  loglevel = logging.DEBUG
 elif args.verbose:
-  log.setLevel(logging.INFO)
+  loglevel = logging.INFO
+log.setLevel(loglevel)
 
 grammar = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mm.g")).read()
 l = lark.Lark(grammar, parser="lalr")
-p = l.parse(''.join(open(args.file).read()))
+p = l.parse(open(args.file).read())
 log.info("*********** LOADED ***********")
 
 class Scope(object):
@@ -152,8 +155,7 @@ def exec_metamath(scope, lbls):
         vt, vnms = stack.pop()
         assert v in scope.vtypes
         if scope.vtypes[v] != vt:
-          log.warning("  expected type %s, got type %s while binding %s to %s" %
-                      (scope.vtypes[v], vt, v, lp(vnms)))
+          log.warning("  expected type %s, got type %s while binding %s to %s" % (scope.vtypes[v], vt, v, lp(vnms)))
         assert scope.vtypes[v] == vt
         log.debug("  bind %s to %s" % (v, lp(vnms)))
         bindings[v] = vnms
@@ -226,9 +228,7 @@ def exec_metamath(scope, lbls):
     refs.append(stack.peek())
 
   # confirm stack is this
-  ret = stack.pop()
-  assert(len(stack) == 0)
-  return ret
+  return stack
 
 def parse_stmt(scope, xx):
   if xx.data == "variable_stmt":
@@ -293,7 +293,7 @@ def parse(p):
         scope.constants.add(cname)
     elif xx.data == "include_stmt":
       fn = str(xx.children[0])
-      print("including %s" % fn)
+      log.info("including %s" % fn)
       parse(l.parse(open(fn).read()))
     else:
       parse_stmt(scope, xx.children[0])
@@ -313,14 +313,124 @@ for k,v in pbar:
     else:
       lbls = xx.children
     log.info(lp(lbls))
-    o = exec_metamath(v['scope'], lbls)
+    stack = exec_metamath(v['scope'], lbls)
+    o = stack.pop()
+    assert len(stack) == 0
     log.info("  produced %s %s expected %s %s" % (o[0], lp(o[1]), v['type'], lp(v['ms'])))
     assert o == (v['type'], v['ms'])
 log.info("*********** VERIFIED ***********")
 
+def search_forward(scope, ty, ms):
+  print("asserts: %d hypos: %d" % (len(scope.asserts), len(scope.hypos)))
+  all_lbls = [lark.lexer.Token(value=x, type_="LABEL") for x in list(scope.asserts.keys())+list(scope.hypos.keys())]
+  ok = [[],]
+  d = 0
+  while 1:
+    d += 1
+    print("searching at depth %d with %d" % (d, len(ok)))
+    for prefix in ok[:]:
+      for l in all_lbls:
+        try:
+          log.setLevel(logging.ERROR)
+          x = prefix+[l]
+          stack = exec_metamath(scope, x)
+          log.setLevel(loglevel)
+          o = stack.pop()
+          if o[0] == ty and o[1] == ms:
+            print("HIT", lp(x))
+            return
+          ok.append(x)
+        except Exception:
+          #traceback.print_exc()
+          pass
+
+def can_produce(scope, tms, ms, d):
+  var = variables_in_scope(scope, tms)
+  #print("CAN", lp(tms), "PRODUCE", lp(ms), "REPLACING", lp(var))
+  p0, p1 = 0, 0
+  binds = {}
+  while p0 < len(tms) and p1 < len(ms):
+    if tms[p0] not in var:
+      if tms[p0] == ms[p1]:
+        p0 += 1
+        p1 += 1
+      else:
+        return None
+    elif tms[p0] in binds:
+      b = binds[tms[p0]]
+      if b[1] == ms[p1:p1+len(b[1])]:
+        p0 += 1
+        p1 += len(b[1])
+      else:
+        return None
+    else:
+      # tms[p0] is a var
+      # 1 symbol replaced for now
+      # this is an issue
+      for l in range(1, len(ms)-p1+1):
+        if tms[p0] not in binds:
+          qret = search(scope, scope.vtypes[tms[p0]], ms[p1:p1+l], d+1)
+          if qret is not None:
+            binds[tms[p0]] = (scope.vtypes[tms[p0]], ms[p1:p1+l], qret)
+            p0 += 1
+            p1 += l
+            break
+      else:
+        return None
+  if p0 != len(tms) or p1 != len(ms):
+    return None
+  return binds
+
+def search(scope, ty, ms, d=0):
+  if d == 10:
+    return None
+  print("  "*d+"searching for", ty, lp(ms))
+  for k,x in scope.hypos.items():
+    # hypothesis must be exact
+    if x['type'] == ty and x['ms'] == ms:
+      # exact match ends the search
+      return [k]
+
+  for k,x in scope.asserts.items():
+    if x['type'] == ty:
+      binds = can_produce(scope, x['ms'], ms, d)
+      if binds is not None:
+        # get the order right
+        var = variables_in_scope(scope, x['ms'])
+        good = True
+        rret = []
+        for kk in var:
+          if kk not in binds:
+            good = False
+            break
+          rret += binds[kk][2]
+        if good:
+          return rret+[k]
+
+  return None
+
+def tokenize(ind, type_):
+  return [lark.lexer.Token(value=x, type_=type_) for x in ind.split(" ")]
+
+"""
+#ms = tokenize("wff not = 0 S x", "MATH_SYMBOL")
+#ms = tokenize("wff not = 0 S t", "MATH_SYMBOL")
+ms = tokenize("wff = 0 0", "MATH_SYMBOL")
+#ms = tokenize("|- = 0 0", "MATH_SYMBOL")
+#ms = tokenize("term x", "MATH_SYMBOL")
+#ms = tokenize("var x", "MATH_SYMBOL")
+ret = search(scope, ms[0], ms[1:])
+print(lp(ret))
+t = exec_metamath(scope, ret).pop()
+print(t[0], lp(t[1]))
+"""
+
 if args.repl:
   print("entering repl")
+  # labels
   print("asserts:", lp(scope.asserts))
+  print("hypos:", lp(scope.hypos))
+  # math symbols
   print("constants:", lp(scope.constants))
   print("variables:", lp(scope.variables))
   try:
@@ -332,12 +442,30 @@ if args.repl:
     readline.parse_and_bind("tab: complete")
 
   while True:
-    ind = input('lbls> ').strip()
-    if len(ind) > 0:
-      lbls = [lark.lexer.Token(value=x, type_="LABEL") for x in ind.split(" ")]
+    ind = input('cmd> ').strip()
+    if len(ind) == 0 or " " not in ind:
+      continue
+    cmd, ind = ind.split(" ", 1)
+    if cmd == "c" or cmd == "command":
+      lbls = tokenize(ind, "LABEL")
       try:
-        o = exec_metamath(scope, lbls)
-        print(o[0], lp(o[1]))
+        stack = exec_metamath(scope, lbls)
+        while len(stack) != 0:
+          o = stack.pop()
+          print(o[0], lp(o[1]))
       except Exception:
         traceback.print_exc()
+    elif cmd == "s" or cmd == "search":
+      # search for a set of labels that produces this string of math symbols
+      ms = tokenize(ind, "MATH_SYMBOL")
+      try:
+        ret = search(scope, ms[0], ms[1:])
+        if ret is not None:
+          print(lp(ret))
+        else:
+          print("search failed")
+      except KeyboardInterrupt:
+        print("interrupted")
+        pass
+
 
