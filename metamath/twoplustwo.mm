@@ -54,9 +54,64 @@ $.
 
 $( (forall x, forall y, x=y -> phi <-> psi) -> forall x, phi <-> forall y, psi $)
 
-tmp3 $a |- implies = x 0 iff = S x = S 0 $.
+tmp3 $p |- implies and = t t = x 0 iff = t x = t 0 $=
+  tt tt varx tvar tzero binpred_equals eq-congr
+$.
+
+tmp3a $p |- implies = x 0 = S x S 0 $=
+  varx tvar tzero eq-suc
+$.
 
 $( x=0 -> (0 != S x <-> 0 != S 0) $)
+$(
+   ax-3
+
+   s0 = S x
+   s1 = S 0
+   t0 = 0
+   t1 = 0
+   binpred_equals
+   eq-congr -> iff = 0 S x = 0 S 0
+$)
+
+tmp3b $p |- implies and = 0 0 = S x S 0 iff = 0 S x = 0 S 0 $=
+  tzero
+  tzero
+  varx tvar tsucc
+  tzero tsucc
+  binpred_equals
+  eq-congr
+$.
+
+tmp3c $a |- implies = S x S 0 and = 0 0 = S x S 0 $.
+
+$(
+  phi: = S x S 0
+  psi: and = 0 0 = S x S 0
+  chi: iff = 0 S x = 0 S 0
+$)
+
+tmp3d $a |- implies = S x S 0 iff = 0 S x = 0 S 0 $.
+
+$(
+  phi: = x 0
+  psi: = S x S 0
+  chi: iff = 0 S x = 0 S 0
+$)
+
+tmp3e $a |- implies = x 0 iff = 0 S x = 0 S 0 $.
+
+tmp3f $a |- implies iff 0 S x = 0 S 0 iff not = 0 S x not = 0 S 0 $.
+
+$(
+  phi: = x 0
+  psi: iff = 0 S x = 0 S 0
+  chi: iff  not = 0 S x not = 0 S 0
+  phi -> psi = tmp3e
+  psi -> chi = tmp3f
+$)
+
+
 cheat3 $a |- implies = x 0 iff not = 0 S x not = 0 S 0 $.
 
 $( t,x,phi,chi,all_elim3_hyp1 $)
